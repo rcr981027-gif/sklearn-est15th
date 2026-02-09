@@ -1,0 +1,11 @@
+age,balance,income,credit_limit,gender,education,marital_status,default
+25,2000,3000,5000,M,Bachelor,Single,0
+40,5000,6000,10000,F,Master,Married,1
+35,3000,4000,7000,M,PhD,Single,0
+50,7000,8000,12000,F,HighSchool,Married,1
+29,1500,2800,4000,M,Bachelor,Single,0
+45,6500,7000,11000,F,Master,Married,1
+33,4200,4500,8000,M,PhD,Single,0
+60,8000,9000,15000,F,HighSchool,Married,1
+38,3900,5000,9000,M,Bachelor,Single,0
+52,7200,8500,13000,F,Master,Married,1

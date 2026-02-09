@@ -1,0 +1,530 @@
+﻿cell_type,source
+markdown,"# 서울시 따릉이 공유 자전거 수요 예측 - AutoGluon
+
+이 노트북에서는 AutoGluon을 활용하여 서울시 공유 자전거(따릉이) 수요를 예측합니다.
+
+## 목차
+1. 데이터 로드 및 탐색
+2. 컬럼별 데이터 분석 및 시각화
+3. 전처리
+4. 특성 엔지니어링
+5. 모델링 (AutoGluon)
+6. 앙상블
+7. 모델 비교 평가
+8. submission.csv 파일 생성"
+markdown,## 1. 데이터 로드 및 탐색
+code,"import matplotlib as mpl
+print(mpl.get_cachedir()) # 출력된 경로의 폴더를 삭제 후 커널 재시작"
+code,"# 필요한 라이브러리 임포트
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# 시각화 스타일 설정
+plt.style.use('seaborn-v0_8-whitegrid')
+sns.set_palette('husl')"
+code,"import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+
+# 윈도우 폰트 경로 설정 (일반적으로 이 경로에 위치합니다)
+font_path = 'C:/Windows/Fonts/malgun.ttf'
+font_prop = fm.FontProperties(fname=font_path).get_name()
+
+# 폰트 설정
+plt.rc('font', family=font_prop)
+plt.rcParams['axes.unicode_minus'] = False
+
+# 테스트
+plt.figure(figsize=(5,3))
+plt.title('한글 출력 테스트')
+plt.plot([1, 2, 3], [4, 5, 6])
+plt.show()"
+code,"import os 
+
+os.getcwd()"
+code,"# 데이터 로드
+train = pd.read_csv('C:/Users/alsld/github/data science/pandas/data/train.csv')
+test = pd.read_csv('C:/Users/alsld/github/data science/pandas/data/test.csv')
+submission = pd.read_csv('C:/Users/alsld/github/data science/pandas/data/submission.csv')
+
+print(f'Train 데이터 크기: {train.shape}')
+print(f'Test 데이터 크기: {test.shape}')
+print(f'Submission 데이터 크기: {submission.shape}')"
+code,"import os
+print(os.getcwd())
+"
+code,"# 데이터 확인
+print('=== Train 데이터 상위 5개 ===' )
+display(train.head())
+
+print('\n=== Test 데이터 상위 5개 ===')
+display(test.head())"
+code,"# 데이터 정보 확인
+print('=== Train 데이터 정보 ===')
+train.info()"
+code,"# 기술 통계량
+print('=== Train 데이터 기술 통계량 ===')
+train.describe()"
+code,"# 결측치 확인
+print('=== Train 결측치 ===' )
+print(train.isnull().sum())
+print(f'\n결측치 비율(%):')
+print((train.isnull().sum() / len(train) * 100).round(2))"
+code,"print('=== Test 결측치 ===')
+print(test.isnull().sum())
+print(f'\n결측치 비율(%):')
+print((test.isnull().sum() / len(test) * 100).round(2))"
+markdown,## 2. 컬럼별 데이터 분석 및 시각화
+markdown,### 2.1 타겟 변수 (count) 분석
+code,"# 타겟 변수 분포
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# 히스토그램
+axes[0].hist(train['count'], bins=50, edgecolor='black', alpha=0.7)
+axes[0].set_xlabel('자전거 대여 수')
+axes[0].set_ylabel('빈도')
+axes[0].set_title('자전거 대여 수 분포')
+axes[0].axvline(train['count'].mean(), color='red', linestyle='--', label=f'평균: {train[""count""].mean():.1f}')
+axes[0].axvline(train['count'].median(), color='green', linestyle='--', label=f'중앙값: {train[""count""].median():.1f}')
+axes[0].legend()
+
+# 박스플롯
+axes[1].boxplot(train['count'])
+axes[1].set_ylabel('자전거 대여 수')
+axes[1].set_title('자전거 대여 수 박스플롯')
+
+plt.tight_layout()
+plt.show()
+
+print(f'자전거 대여 수 통계:')
+print(f'- 평균: {train[""count""].mean():.2f}')
+print(f'- 중앙값: {train[""count""].median():.2f}')
+print(f'- 표준편차: {train[""count""].std():.2f}')
+print(f'- 최소값: {train[""count""].min():.0f}')
+print(f'- 최대값: {train[""count""].max():.0f}')
+print(f'- 왜도(Skewness): {train[""count""].skew():.2f}')
+print(f'- 첨도(Kurtosis): {train[""count""].kurtosis():.2f}')"
+markdown,### 2.2 시간(hour) 분석
+code,"# 시간별 자전거 대여 수
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# 시간별 평균 대여 수
+hourly_mean = train.groupby('hour')['count'].mean()
+axes[0].bar(hourly_mean.index, hourly_mean.values, color='steelblue', edgecolor='black')
+axes[0].set_xlabel('시간')
+axes[0].set_ylabel('평균 대여 수')
+axes[0].set_title('시간별 평균 자전거 대여 수')
+axes[0].set_xticks(range(24))
+
+# 시간별 박스플롯
+train.boxplot(column='count', by='hour', ax=axes[1])
+axes[1].set_xlabel('시간')
+axes[1].set_ylabel('대여 수')
+axes[1].set_title('시간별 자전거 대여 수 분포')
+plt.suptitle('')
+
+plt.tight_layout()
+plt.show()"
+markdown,### 2.3 기상 변수 분석
+code,"# 기상 변수 목록
+weather_cols = ['hour_bef_temperature', 'hour_bef_precipitation', 'hour_bef_windspeed', 
+                'hour_bef_humidity', 'hour_bef_visibility', 'hour_bef_ozone', 
+                'hour_bef_pm10', 'hour_bef_pm2.5']
+
+# 각 기상 변수의 분포
+fig, axes = plt.subplots(2, 4, figsize=(16, 10))
+axes = axes.flatten()
+
+for i, col in enumerate(weather_cols):
+    axes[i].hist(train[col].dropna(), bins=30, edgecolor='black', alpha=0.7)
+    axes[i].set_xlabel(col.replace('hour_bef_', ''))
+    axes[i].set_ylabel('빈도')
+    axes[i].set_title(f'{col.replace(""hour_bef_"", """")} 분포')
+
+plt.tight_layout()
+plt.show()"
+code,"# 기상 변수와 대여 수의 관계 (산점도)
+fig, axes = plt.subplots(2, 4, figsize=(16, 10))
+axes = axes.flatten()
+
+for i, col in enumerate(weather_cols):
+    axes[i].scatter(train[col], train['count'], alpha=0.3, s=10)
+    axes[i].set_xlabel(col.replace('hour_bef_', ''))
+    axes[i].set_ylabel('대여 수')
+    axes[i].set_title(f'{col.replace(""hour_bef_"", """")} vs 대여 수')
+
+plt.tight_layout()
+plt.show()"
+markdown,### 2.4 상관관계 분석
+code,"# 상관관계 히트맵
+plt.figure(figsize=(12, 10))
+correlation_matrix = train.drop('id', axis=1).corr()
+mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
+sns.heatmap(correlation_matrix, mask=mask, annot=True, fmt='.2f', cmap='coolwarm', 
+            center=0, linewidths=0.5)
+plt.title('변수 간 상관관계 히트맵')
+plt.tight_layout()
+plt.show()
+
+# count와의 상관관계
+print('\n=== 타겟 변수(count)와의 상관관계 ===')
+print(correlation_matrix['count'].sort_values(ascending=False))"
+markdown,### 2.5 강수량 분석
+code,"# 강수 여부에 따른 대여 수 비교
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# 강수 여부 분포
+rain_counts = train['hour_bef_precipitation'].value_counts()
+axes[0].bar(['비 안옴 (0.0)', '비 옴 (1.0)'], [rain_counts.get(0.0, 0), rain_counts.get(1.0, 0)], 
+           color=['skyblue', 'salmon'], edgecolor='black')
+axes[0].set_ylabel('데이터 수')
+axes[0].set_title('강수 여부 분포')
+
+# 강수 여부별 평균 대여 수
+rain_mean = train.groupby('hour_bef_precipitation')['count'].mean()
+axes[1].bar(['비 안옴 (0.0)', '비 옴 (1.0)'], [rain_mean.get(0.0, 0), rain_mean.get(1.0, 0)],
+           color=['skyblue', 'salmon'], edgecolor='black')
+axes[1].set_ylabel('평균 대여 수')
+axes[1].set_title('강수 여부에 따른 평균 자전거 대여 수')
+
+plt.tight_layout()
+plt.show()"
+markdown,## 3. 전처리
+code,"# 데이터 복사
+train_df = train.copy()
+test_df = test.copy()
+
+print(f'Train 결측치 개수:')
+print(train_df.isnull().sum())
+print(f'\nTest 결측치 개수:')
+print(test_df.isnull().sum())"
+code,"# 결측치 처리 함수
+def fill_missing_values(df):
+    df_filled = df.copy()
+    
+    # 각 컬럼별 결측치 처리 (시간별 평균으로 대체)
+    numeric_cols = df_filled.select_dtypes(include=[np.number]).columns.tolist()
+    numeric_cols = [col for col in numeric_cols if col not in ['id', 'count']]
+    
+    for col in numeric_cols:
+        if df_filled[col].isnull().sum() > 0:
+            # 시간별 평균으로 결측치 대체
+            hour_mean = df_filled.groupby('hour')[col].transform('mean')
+            df_filled[col] = df_filled[col].fillna(hour_mean)
+            # 여전히 결측치가 있다면 전체 평균으로 대체
+            df_filled[col] = df_filled[col].fillna(df_filled[col].mean())
+    
+    return df_filled
+
+# 결측치 처리 적용
+train_df = fill_missing_values(train_df)
+test_df = fill_missing_values(test_df)
+
+print('결측치 처리 후:')
+print(f'Train 결측치: {train_df.isnull().sum().sum()}')
+print(f'Test 결측치: {test_df.isnull().sum().sum()}')"
+code,"# 이상치 확인 및 처리
+def detect_outliers_iqr(df, column):
+    Q1 = df[column].quantile(0.25)
+    Q3 = df[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outliers = df[(df[column] < lower_bound) | (df[column] > upper_bound)]
+    return outliers, lower_bound, upper_bound
+
+# 주요 변수의 이상치 확인
+print('=== 이상치 분석 ===')
+for col in weather_cols:
+    outliers, lb, ub = detect_outliers_iqr(train_df, col)
+    if len(outliers) > 0:
+        print(f'{col}: {len(outliers)}개 이상치 (범위: {lb:.2f} ~ {ub:.2f})')"
+markdown,## 4. 특성 엔지니어링
+code,"def create_features(df):
+    df_fe = df.copy()
+    
+    # 시간 관련 특성
+    # 출퇴근 시간 여부 (7-9시, 18-20시)
+    df_fe['is_rush_hour'] = ((df_fe['hour'] >= 7) & (df_fe['hour'] <= 9) | 
+                            (df_fe['hour'] >= 18) & (df_fe['hour'] <= 20)).astype(int)
+    
+    # 낮/밤 구분 (6시-18시: 낮)
+    df_fe['is_daytime'] = ((df_fe['hour'] >= 6) & (df_fe['hour'] < 18)).astype(int)
+    
+    # 시간대 구분 (새벽/아침/점심/저녁/밤)
+    def get_time_period(hour):
+        if hour < 6:
+            return 0  # 새벽
+        elif hour < 12:
+            return 1  # 아침
+        elif hour < 14:
+            return 2  # 점심
+        elif hour < 18:
+            return 3  # 오후
+        elif hour < 22:
+            return 4  # 저녁
+        else:
+            return 5  # 밤
+    
+    df_fe['time_period'] = df_fe['hour'].apply(get_time_period)
+    
+    # 시간의 주기적 특성 (sin/cos 변환)
+    df_fe['hour_sin'] = np.sin(2 * np.pi * df_fe['hour'] / 24)
+    df_fe['hour_cos'] = np.cos(2 * np.pi * df_fe['hour'] / 24)
+    
+    # 기상 관련 특성
+    # 체감온도 근사 (온도, 습도, 풍속 고려)
+    df_fe['feels_like'] = df_fe['hour_bef_temperature'] - \
+                         0.55 * (1 - df_fe['hour_bef_humidity']/100) * \
+                         (df_fe['hour_bef_temperature'] - 14.5)
+    
+    # 불쾌지수
+    df_fe['discomfort_index'] = 0.81 * df_fe['hour_bef_temperature'] + \
+                                0.01 * df_fe['hour_bef_humidity'] * \
+                                (0.99 * df_fe['hour_bef_temperature'] - 14.3) + 46.3
+    
+    # 날씨 좋음 지표 (비 안오고, 적당한 온도, 낮은 미세먼지)
+    df_fe['good_weather'] = ((df_fe['hour_bef_precipitation'] == 0) & 
+                            (df_fe['hour_bef_temperature'] >= 10) & 
+                            (df_fe['hour_bef_temperature'] <= 25) &
+                            (df_fe['hour_bef_pm10'] < 80)).astype(int)
+    
+    # 대기질 지수 (PM10과 PM2.5의 가중 평균)
+    df_fe['air_quality_index'] = (df_fe['hour_bef_pm10'] * 0.4 + 
+                                  df_fe['hour_bef_pm2.5'] * 0.6)
+    
+    # 시정 그룹화
+    df_fe['visibility_group'] = pd.cut(df_fe['hour_bef_visibility'], 
+                                       bins=[0, 500, 1000, 1500, 2001],
+                                       labels=[0, 1, 2, 3]).astype(int)
+    
+    # 온도 구간
+    df_fe['temp_group'] = pd.cut(df_fe['hour_bef_temperature'],
+                                 bins=[-10, 0, 10, 20, 30, 40],
+                                 labels=[0, 1, 2, 3, 4]).astype(int)
+    
+    # 상호작용 특성
+    df_fe['temp_humidity'] = df_fe['hour_bef_temperature'] * df_fe['hour_bef_humidity']
+    df_fe['temp_wind'] = df_fe['hour_bef_temperature'] * df_fe['hour_bef_windspeed']
+    
+    return df_fe
+
+# 특성 엔지니어링 적용
+train_fe = create_features(train_df)
+test_fe = create_features(test_df)
+
+print(f'특성 엔지니어링 후 Train 컬럼 수: {train_fe.shape[1]}')
+print(f'특성 엔지니어링 후 Test 컬럼 수: {test_fe.shape[1]}')
+print(f'\n새로 생성된 특성들:')
+new_features = [col for col in train_fe.columns if col not in train_df.columns]
+print(new_features)"
+code,"# 새로 생성된 특성과 타겟 변수의 상관관계
+print('=== 새로운 특성과 count의 상관관계 ===')
+for feat in new_features:
+    corr = train_fe[feat].corr(train_fe['count'])
+    print(f'{feat}: {corr:.4f}')"
+markdown,## 5. 모델링 (AutoGluon)
+code,"# AutoGluon 설치 확인 및 임포트
+try:
+    from autogluon.tabular import TabularPredictor
+    print('AutoGluon 임포트 성공!')
+except ImportError:
+    print('AutoGluon이 설치되어 있지 않습니다.')
+    print('설치 명령어: pip install autogluon')"
+code,"from autogluon.tabular import TabularPredictor
+from sklearn.model_selection import train_test_split
+
+# 학습/검증 데이터 분리
+X = train_fe.drop(['id', 'count'], axis=1)
+y = train_fe['count']
+
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 학습 데이터 준비
+train_data = pd.concat([X_train, y_train], axis=1)
+val_data = pd.concat([X_val, y_val], axis=1)
+
+print(f'학습 데이터 크기: {train_data.shape}')
+print(f'검증 데이터 크기: {val_data.shape}')"
+code,"# AutoGluon 모델 학습
+predictor = TabularPredictor(
+    label='count',
+    problem_type='regression',
+    eval_metric='root_mean_squared_error',
+    path='./autogluon_models'
+)
+
+# 모델 학습 (다양한 모델 앙상블)
+predictor.fit(
+    train_data=train_data,
+    time_limit=60,
+    presets='medium_quality_faster_train',
+    verbosity=2
+)
+"
+code,"# 학습된 모델 요약
+print('=== 학습된 모델 리더보드 ===')
+leaderboard = predictor.leaderboard(val_data, silent=True)
+display(leaderboard)"
+code,"# 검증 데이터 성능 평가
+val_predictions = predictor.predict(val_data.drop('count', axis=1))
+
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+
+rmse = np.sqrt(mean_squared_error(y_val, val_predictions))
+mae = mean_absolute_error(y_val, val_predictions)
+r2 = r2_score(y_val, val_predictions)
+
+print('=== 검증 데이터 성능 ===')
+print(f'RMSE: {rmse:.4f}')
+print(f'MAE: {mae:.4f}')
+print(f'R2 Score: {r2:.4f}')"
+code,"# 특성 중요도
+print('=== 특성 중요도 ===')
+feature_importance = predictor.feature_importance(val_data)
+display(feature_importance.head(20))
+
+# 특성 중요도 시각화
+plt.figure(figsize=(12, 8))
+top_features = feature_importance.head(15)
+plt.barh(range(len(top_features)), top_features['importance'].values)
+plt.yticks(range(len(top_features)), top_features.index)
+plt.xlabel('중요도')
+plt.title('AutoGluon 특성 중요도 (상위 15개)')
+plt.gca().invert_yaxis()
+plt.tight_layout()
+plt.show()"
+markdown,## 6. 앙상블
+code,"# AutoGluon의 내부 앙상블 모델 확인
+print('=== AutoGluon 앙상블 구성 ===')
+model_info = predictor.info()
+print(f""사용된 모델 수: {len(predictor.model_names())}"")
+print(f""\n모델 목록:"")
+for model_name in predictor.model_names():
+    print(f""  - {model_name}"")"
+code,"# 개별 모델 성능 비교
+print('=== 개별 모델 성능 비교 ===')
+model_results = {}
+for model_name in predictor.model_names():
+    try:
+        pred = predictor.predict(val_data.drop('count', axis=1), model=model_name)
+        rmse = np.sqrt(mean_squared_error(y_val, pred))
+        model_results[model_name] = rmse
+    except:
+        pass
+
+# 결과 정렬 및 출력
+model_results_sorted = dict(sorted(model_results.items(), key=lambda x: x[1]))
+for model, rmse in model_results_sorted.items():
+    print(f'{model}: RMSE = {rmse:.4f}')"
+code,"# 모델별 성능 시각화
+plt.figure(figsize=(12, 6))
+models = list(model_results_sorted.keys())[:10]  # 상위 10개
+rmses = [model_results_sorted[m] for m in models]
+
+plt.barh(range(len(models)), rmses, color='steelblue', edgecolor='black')
+plt.yticks(range(len(models)), models)
+plt.xlabel('RMSE (낮을수록 좋음)')
+plt.title('모델별 RMSE 비교 (상위 10개)')
+plt.gca().invert_yaxis()
+plt.tight_layout()
+plt.show()"
+markdown,## 7. 모델 비교 평가
+code,"# 예측값 vs 실제값 비교
+best_predictions = predictor.predict(val_data.drop('count', axis=1))
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# 산점도
+axes[0].scatter(y_val, best_predictions, alpha=0.5, s=20)
+axes[0].plot([y_val.min(), y_val.max()], [y_val.min(), y_val.max()], 'r--', lw=2)
+axes[0].set_xlabel('실제 대여 수')
+axes[0].set_ylabel('예측 대여 수')
+axes[0].set_title('실제값 vs 예측값')
+
+# 잔차 분포
+residuals = y_val - best_predictions
+axes[1].hist(residuals, bins=50, edgecolor='black', alpha=0.7)
+axes[1].axvline(x=0, color='red', linestyle='--')
+axes[1].set_xlabel('잔차 (실제 - 예측)')
+axes[1].set_ylabel('빈도')
+axes[1].set_title('잔차 분포')
+
+plt.tight_layout()
+plt.show()
+
+print(f'잔차 통계:')
+print(f'- 평균: {residuals.mean():.4f}')
+print(f'- 표준편차: {residuals.std():.4f}')"
+code,"# 최종 성능 요약
+print('=' * 50)
+print('AutoGluon 최종 성능 요약')
+print('=' * 50)
+print(f'\n최고 성능 모델: {predictor.model_best}')
+print(f'\n검증 데이터 성능:')
+print(f'  - RMSE: {rmse:.4f}')
+print(f'  - MAE: {mae:.4f}')
+print(f'  - R² Score: {r2:.4f}')
+print('=' * 50)"
+markdown,## 8. submission.csv 파일 생성
+code,"# 테스트 데이터 예측
+test_features = test_fe.drop('id', axis=1)
+test_predictions = predictor.predict(test_features)
+
+# 음수 예측값 처리 (대여 수는 음수가 될 수 없음)
+test_predictions = np.maximum(test_predictions, 0)
+
+print(f'테스트 예측값 통계:')
+print(f'- 평균: {test_predictions.mean():.2f}')
+print(f'- 중앙값: {np.median(test_predictions):.2f}')
+print(f'- 최소값: {test_predictions.min():.2f}')
+print(f'- 최대값: {test_predictions.max():.2f}')"
+code,"# submission 파일 생성
+submission_df = pd.DataFrame({
+    'id': test_fe['id'],
+    'count': test_predictions
+})
+
+# 결과 확인
+print('=== Submission 데이터 미리보기 ===')
+display(submission_df.head(10))
+
+# CSV 파일로 저장
+submission_df.to_csv('./submission_autogluon.csv', index=False)
+print(f'\n파일 저장 완료: ./submission_autogluon.csv')
+print(f'제출 파일 크기: {submission_df.shape}')"
+code,"# 예측 분포 확인
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# 학습 데이터 분포
+axes[0].hist(train_fe['count'], bins=50, alpha=0.7, label='Train', edgecolor='black')
+axes[0].set_xlabel('대여 수')
+axes[0].set_ylabel('빈도')
+axes[0].set_title('학습 데이터 분포')
+axes[0].legend()
+
+# 예측 분포
+axes[1].hist(test_predictions, bins=50, alpha=0.7, label='Predictions', edgecolor='black', color='orange')
+axes[1].set_xlabel('예측 대여 수')
+axes[1].set_ylabel('빈도')
+axes[1].set_title('테스트 예측 분포')
+axes[1].legend()
+
+plt.tight_layout()
+plt.show()"
+markdown,"## 완료!
+
+AutoGluon을 사용하여 서울시 따릉이 자전거 수요 예측 모델을 구축하였습니다.
+
+### 요약
+- **데이터 분석**: 시간, 기상 변수들의 분포와 타겟 변수와의 관계 분석
+- **전처리**: 결측치를 시간별 평균으로 대체
+- **특성 엔지니어링**: 시간 관련 특성, 기상 관련 특성, 상호작용 특성 생성
+- **모델링**: AutoGluon의 자동 모델 선택 및 하이퍼파라미터 튜닝
+- **앙상블**: AutoGluon 내장 앙상블 기법 활용
+- **평가**: RMSE, MAE, R² Score 기반 성능 평가
+- **제출**: submission_autogluon.csv 파일 생성"
